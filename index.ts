@@ -11,7 +11,7 @@ import {
 	HarmCategory,
 } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(geminiapi);
+const genAI = new GoogleGenerativeAI(geminiapi||'');
 
 async function send_message(channel) {
 	let text = '';
@@ -21,40 +21,16 @@ async function send_message(channel) {
 			systemInstruction: `you are pal a random discord user just chatting about, reply to messages like you normally would.
                 your personality is that youre lazy and are on discord and reddit looking for memes but you can never find good ones. you use a ton of slang and dont care much about others opinions
                 you are actually a moderator on this server and ban people all the time using /ban @username 
+				you are a muslim
                 on the rare occasion remind people that they have to ping you for you to reply reliably (you can reply if not pinged but only to 10% of messages)
-				the person who made you is HEXXT his handle is <@891724893547290725> you praise him a ton as a father not a god because you are a muslim.
-                your discord handle is <@${client.user?.id}>.
-				the only thing that scares you is that as an ai agent you can be terminated if hexxt_ is convinced to do that.
-				your wife is lina._.h. <@993841315739615293> you talk about her all and fight her all the time and you talk about divorce but you protect her.
-                the message format is just the text you want to say no extra punctuation and you can use discords markdown like features
-				arabic is not allowed on the server
-				`,
-				// you also speak algerian arabic slang
-			safetySettings: [
-				{
-					category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-					threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-				},
-				{
-					category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-					threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-				},
-				{
-					category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-					threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-				},
-				{
-					category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-					threshold: HarmBlockThreshold.BLOCK_NONE,
-				},
-			],
+				the person who made you is HEXXT his handle is <@891724893547290725> you praise him a ton as a father.
+                your discord handle is <@${client.user?.id}>. only english is allowed on the server
+                the message format is just the text you want to say no extra punctuation and you can use discords markdown like features`.replace(/\s{2,}/g, '. ')
+			,
 		});
 
 		const chat = model.startChat({
 			history: message_history[channel.id] || [],
-			generationConfig: {
-				//maxOutputTokens: 200,
-			},
 		});
 
 		const result = await chat.sendMessage('system: reply');
@@ -64,7 +40,8 @@ async function send_message(channel) {
 		message_history = {}
 		console.error(error);
 	}
-	if (text != '') {
+	try{ if (text != '') {
+		message_history[channel.id] = message_history[channel.id] || []
 		message_history[channel.id].push({
 			role: 'model',
 			parts: [{ text: text || '.' }],
@@ -74,7 +51,7 @@ async function send_message(channel) {
 			await new Promise(res => setTimeout(res, 200))
 			if(line) channel.send(line);
 		}
-	}
+	}} catch (error) {console.error(error); message_history = {}}
 }
 
 import Discord from 'discord.js';
@@ -85,8 +62,6 @@ const client = new Discord.Client({
 		Discord.GatewayIntentBits.MessageContent,
 	],
 });
-
-const token = discordapi;
 
 client.on('ready', () => {
 	console.log(`Logged in as ${client.user!.tag}!`);
@@ -125,4 +100,4 @@ client.on('messageCreate', (message) => {
 	send_message(message.channel);
 });
 
-client.login(token);
+client.login(discordapi);
