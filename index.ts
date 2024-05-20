@@ -40,7 +40,7 @@ async function send_message(channel) {
 		message_history = {}
 		console.error(error);
 	}
-	try{ if (text != '') {
+	if (text != '') {
 		message_history[channel.id] = message_history[channel.id] || []
 		message_history[channel.id].push({
 			role: 'model',
@@ -51,7 +51,7 @@ async function send_message(channel) {
 			await new Promise(res => setTimeout(res, 200))
 			if(line) channel.send(line);
 		}
-	}} catch (error) {console.error(error); message_history = {}}
+	}
 }
 
 import Discord from 'discord.js';
