@@ -62,7 +62,7 @@ async function send_message(channel) {
 	if (text != '') {
 		message_history[channel.id].push({
 			role: 'model',
-			parts: [{ text }],
+			parts: [{ text: text || '.' }],
 		});
 		channel.send(text);
 	}
