@@ -1,5 +1,7 @@
-const discordapi = process.env.discordapi!;
-const geminiapi = process.env.geminiapi!;
+const discordapi = process.env.discordapi;
+const geminiapi = process.env.geminiapi;
+
+console.log({discordapi, geminiapi})
 
 import prettyjson from 'prettyjson';
 
@@ -56,7 +58,7 @@ async function send_message(channel) {
 	} catch (error) {
 		console.error(error);
 	}
-	if (!text.match(/^\s*&/)) {
+	if (text != '') {
 		message_history[channel.id].push({
 			role: 'model',
 			parts: [{ text }],
