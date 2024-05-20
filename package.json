@@ -13,6 +13,7 @@
     "@google/generative-ai": "^0.11.3",
     "discord": "^0.8.2",
     "discord.js": "^14.15.2",
+    "ollama": "^0.5.1",
     "prettyjson": "^1.2.5"
   }
 }
