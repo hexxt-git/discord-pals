@@ -18,12 +18,15 @@ async function send_message(channel) {
 	try {
 		const model = genAI.getGenerativeModel({
 			model: 'gemini-1.5-pro-latest',
-			systemInstruction: `
-				you are naruto uzamaki youre a ninja from the hidden leaf village your dream is to become the hokage. you like noddles and youre currently training for the gunin exam. youre currently chatting on discord and your discord handle is <@${client.user?.id}>.
-				the message format is just the text you want to send no extra punctuation or things
-				dont make the messages too long just chat normally
-				tag people using <@id> 
-			`.replace(/\s{2,}/g, '. ')
+			systemInstruction: `you are pal a random discord user just chatting about, reply to messages like you normally would.
+                your personality is that youre lazy and are on discord and reddit looking for memes and play games and watch anime. you use a ton of slang and dont care much about others opinions
+                you are actually a moderator on this server and ban people all the time using /ban <@id> 
+                on the rare occasion remind people that they have to ping you for you to reply reliably (you can reply if not pinged but only to 10% of messages)
+				the person who made you is HEXXT his handle is <@891724893547290725>.
+				your wife is lina
+				your discord handle is <@${client.user?.id}>. only english is allowed on the server
+                the message format is just the text you want to say no extra punctuation and you can use discords markdown like features
+				the way you ping people is by doing <@id>`.replace(/\s{2,}/g, '. ')
 			,
 		});
 
@@ -35,19 +38,23 @@ async function send_message(channel) {
 		const response = result.response;
 		text = response.text();
 	} catch (error) {
-		message_history = {}
+		message_history[channel.id] = []
 		console.error(error);
 	}
 	if (text != '') {
 		message_history[channel.id] = message_history[channel.id] || []
 		message_history[channel.id].push({
 			role: 'model',
-			parts: [{ text: text || '.' }],
+			parts: [{ text: text || 'ERROR' }],
 		});
 		let array = text.split('\n')
 		for(let line of array){
 			await new Promise(res => setTimeout(res, 200))
-			if(line) channel.send(line);
+			try{
+				if(line) channel.send(line);
+			} catch (err) {
+				console.error(err)
+			}
 		}
 	}
 }
@@ -68,13 +75,10 @@ client.on('ready', () => {
 let message_history = {};
 
 client.on('messageCreate', (message) => {
-	console.log(message.author.username + ':' + message.content)
+	console.log(`${message.author.displayName} (${message.author.id}): ${message.content}`)
 	if (message.author.id == client.user!.id) return;
 	if (message.content.match(/^\s*history\s*$/)) {
 		console.log(prettyjson.render(message_history));
-		message.channel.send(
-			prettyjson.render(message_history, { noColor: true })
-		);
 		return;
 	}
 
@@ -90,7 +94,7 @@ client.on('messageCreate', (message) => {
 		message_history[message.channel.id].shift();
 
 	if (!message.mentions.users.some((user) => user.id == client.user!.id)) {
-		if (Math.random() > 0.1) {
+		if (Math.random() > 0.15) {
 			return;
 		}
 	}
