@@ -11,8 +11,10 @@
   "description": "",
   "dependencies": {
     "@google/generative-ai": "^0.11.3",
+    "axios": "^1.7.2",
     "discord": "^0.8.2",
     "discord.js": "^14.15.2",
+    "discord.js-selfbot-v13": "^3.3.0",
     "prettyjson": "^1.2.5"
   }
 }
