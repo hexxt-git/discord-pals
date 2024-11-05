@@ -1,40 +1,31 @@
 import {
-    AnyChannel,
     Client as DiscordClient,
-    Message,
     TextChannel,
     DMChannel,
-    User,
+    ThreadChannel,
+    NewsChannel,
+    StageChannel,
+    VoiceChannel,
 } from "discord.js-selfbot-v13";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs/promises";
 import { PermissionFlagsBits } from "discord.js";
 
+import dotenv from "dotenv";
+dotenv.config();
+
 const discord_client = new DiscordClient();
-const genAI = new GoogleGenerativeAI(process.env.geminiapi as string);
+const genAI = new GoogleGenerativeAI(process.env.geminiapi);
 
-interface MessageStruct {
-    sender: string;
-    senderID: string;
-    content: string;
-    replyingTo: MessageStruct | null;
-    messageID: string;
-    isDM: boolean;
-    timestamp: number;
-}
+const message_history = {};
 
-const message_history: { [channelId: string]: MessageStruct[] } = {};
+const delay = async (delay) => new Promise((res) => setTimeout(res, delay));
 
-const delay = async (delay: number) => new Promise((res) => setTimeout(res, delay));
-
-async function constructMessageStruct(
-    message: Message,
-    replyDepthLeft: number = 4
-): Promise<MessageStruct | null> {
+async function constructMessageStruct(message, replyDepthLeft = 4) {
     try {
         if (replyDepthLeft <= 0) return null;
 
-        const messageStruct: MessageStruct = {
+        const messageStruct = {
             sender: message.author.displayName,
             senderID: message.author.id,
             content: message.content,
@@ -45,12 +36,10 @@ async function constructMessageStruct(
         };
 
         if (message.reference && message.reference.messageId) {
-            const originalChannel = await discord_client.channels.fetch(
-                message.reference.channelId as string
-            );
+            const originalChannel = await discord_client.channels.fetch(message.reference.channelId);
             if (originalChannel instanceof TextChannel || originalChannel instanceof DMChannel) {
                 const originalMessage = await originalChannel.messages.fetch(message.reference.messageId);
-                const originalMessageStruct: MessageStruct | null =
+                const originalMessageStruct =
                     message_history[originalChannel.id]?.find(
                         (entry) => entry.messageID === originalMessage.id
                     ) ?? (await constructMessageStruct(originalMessage, replyDepthLeft - 1));
@@ -87,7 +76,7 @@ function timeSince(timestamp) {
     return `${Math.floor(secondsPast / 31536000)} years ago`;
 }
 
-function MessageStructToString(message: MessageStruct | null) {
+function MessageStructToString(message) {
     if (message == null) return "{}";
     return JSON.stringify({
         sender: message.sender,
@@ -99,7 +88,7 @@ function MessageStructToString(message: MessageStruct | null) {
     });
 }
 
-function messageJsonToObject(message: string) {
+function messageJsonToObject(message) {
     if (message === "null") return null;
     if (!message.startsWith("{")) return { message };
     try {
@@ -118,7 +107,7 @@ function messageJsonToObject(message: string) {
     }
 }
 
-async function updateHistory(channel: AnyChannel, newMessageStruct: MessageStruct) {
+async function updateHistory(channel, newMessageStruct) {
     try {
         if (!(channel instanceof TextChannel) && !(channel instanceof DMChannel)) {
             throw new Error("Channel is not a TextChannel or DMChannel");
@@ -127,9 +116,9 @@ async function updateHistory(channel: AnyChannel, newMessageStruct: MessageStruc
         if (!message_history[channel.id]) {
             const messages = (await channel.messages.fetch({ limit: 5 })).reverse();
             const messageStructs = await Promise.all(messages.map((msg) => constructMessageStruct(msg)));
-            message_history[channel.id] = messageStructs.filter((msg): msg is MessageStruct => msg !== null);
+            message_history[channel.id] = messageStructs.filter((msg) => msg !== null);
         } else {
-            message_history[channel.id] = [...(message_history[channel.id] ?? []), newMessageStruct].slice(
+            message_history[channel.id] = [...(message_history[channel.id] || []), newMessageStruct].slice(
                 -20
             );
         }
@@ -138,7 +127,7 @@ async function updateHistory(channel: AnyChannel, newMessageStruct: MessageStruc
     }
 }
 
-async function generateResponse(channel: AnyChannel): Promise<string | null> {
+async function generateResponse(channel) {
     try {
         if (!(channel instanceof TextChannel) && !(channel instanceof DMChannel)) {
             throw new Error("Channel is not a TextChannel or DMChannel");
@@ -156,11 +145,8 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
                 return entry.parts[0].text;
             });
 
-
         if (channel_history[0].role == "model")
             channel_history.unshift({ role: "user", parts: [{ text: "hello" }] });
-
-        // console.log(channel_history.map((m) => messageJsonToObject(m.parts[0].text)));
 
         const systemInstruction = `
             it is very important that you do not repeat messages ever.
@@ -175,7 +161,7 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
             everyone is lil bro
             Your discord name is ${discord_client.user?.displayName} and your id is ${discord_client.user?.id}.
             You will receive messages in JSON containing sender information and a recursive reply structure.
-	    you can speak algerian dardja / arabic like "wch ykho cv" "intik" "w9il khoya" "rani 3yan" "msba7 wana nchof ghir reels"
+            you can speak algerian dardja / arabic like "wch ykho cv" "intik" "w9il khoya" "rani 3yan" "msba7 wana nchof ghir reels"
             Return a message in plain text not json
             The chat output should not be json
             keep messages very short like one sentence and never repeat yourself. if you already said something do not say it again. if something ahas been said do not repeat like an idiot.
@@ -191,9 +177,9 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
             history: channel_history,
         });
 
-        // await delay(Math.random() * 4 + 2);
+        await delay((Math.random() * 4 + 2) * 1000);
         channel.sendTyping();
-        // await delay(Math.random() * 2 + 1);
+        await delay((Math.random() * 2 + 1) * 1000);
 
         const result = await chat.sendMessage("");
         const text = result.response.text().replace(/[\.,]/g, "");
@@ -207,7 +193,7 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
 }
 
 const predefinedEmojis = "👍, 😂, 👀, 😎, 🍕, 💀, ❤️, 🔥, 😱, 🤷, 🥳, 🤓, 😴, 😔, 😭, 😥";
-async function smartReactToMessage(message: Message): Promise<void> {
+async function smartReactToMessage(message) {
     if (Math.random() > 0.2) return;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
@@ -218,7 +204,7 @@ async function smartReactToMessage(message: Message): Promise<void> {
         Your Personality: you're chill and funny, you like the 😔 emoji\n. Message: "${message.content}"`;
 
         const result = await model.generateContent(prompt);
-        const chosenEmojis: string[] = result.response.text().slice(1, -1).split(", ");
+        const chosenEmojis = result.response.text().slice(1, -1).split(", ");
 
         for (let emoji of chosenEmojis) {
             if (predefinedEmojis.includes(emoji)) {
@@ -240,14 +226,25 @@ const instance = Math.floor(Math.random() * 1e9);
 
 discord_client.on("messageCreate", async (message) => {
     try {
-        fs.writeFile(`./logs/log-${instance}.json`, JSON.stringify(message_history));
+        await fs.writeFile(`./logs/log-${instance}.json`, JSON.stringify(message_history));
     } catch (error) {}
 
     try {
-        console.log(message.author.displayName + ': ' + message.content)
-        
+        console.log(message.author.displayName + ": " + message.content);
+
         if (message.channel.type !== "DM") {
-            const permissions = message.channel.permissionsFor(discord_client.user as User);
+            let permissions;
+            if (
+                message.channel instanceof TextChannel ||
+                message.channel instanceof NewsChannel ||
+                message.channel instanceof StageChannel ||
+                message.channel instanceof ThreadChannel ||
+                message.channel instanceof VoiceChannel
+            ) {
+                if (discord_client.user) {
+                    permissions = message.channel.permissionsFor(discord_client.user);
+                }
+            }
             if (!permissions || !permissions.has(PermissionFlagsBits.SendMessages)) {
                 console.log("no permission in", message.channel.name);
                 return;
@@ -260,14 +257,11 @@ discord_client.on("messageCreate", async (message) => {
 
         if (message.author.id == discord_client.user?.id) return;
 
-        // await smartReactToMessage(message);
-
         const mentions = message.mentions.users.some((user, id) => discord_client.user?.id == id);
 
         if (!mentions && Math.random() > 0.2 && (!messageStruct.isDM || Math.random() > 0.8)) return;
-        
 
-        const response: string | null = await generateResponse(message.channel);
+        const response = await generateResponse(message.channel);
 
         if (response) {
             if (Math.random() > 0.5) {
