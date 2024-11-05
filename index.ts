@@ -125,7 +125,7 @@ async function updateHistory(channel: AnyChannel, newMessageStruct: MessageStruc
         }
 
         if (!message_history[channel.id]) {
-            const messages = (await channel.messages.fetch({ limit: 10 })).reverse();
+            const messages = (await channel.messages.fetch({ limit: 5 })).reverse();
             const messageStructs = await Promise.all(messages.map((msg) => constructMessageStruct(msg)));
             message_history[channel.id] = messageStructs.filter((msg): msg is MessageStruct => msg !== null);
         } else {
@@ -144,13 +144,18 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
             throw new Error("Channel is not a TextChannel or DMChannel");
         }
 
-        const channel_history = message_history[channel.id].map((entry) => ({
-            role: entry.senderID == discord_client.user?.id ? "model" : "user",
-            parts:
-                entry.senderID != discord_client.user?.id
-                    ? [{ text: MessageStructToString(entry) }]
-                    : [{ text: entry.content }],
-        }));
+        const channel_history = message_history[channel.id]
+            .map((entry) => ({
+                role: entry.senderID == discord_client.user?.id ? "model" : "user",
+                parts:
+                    entry.senderID != discord_client.user?.id
+                        ? [{ text: MessageStructToString(entry) }]
+                        : [{ text: entry.content }],
+            }))
+            .filter((entry) => {
+                return entry.parts[0].text;
+            });
+
 
         if (channel_history[0].role == "model")
             channel_history.unshift({ role: "user", parts: [{ text: "hello" }] });
@@ -158,32 +163,37 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
         // console.log(channel_history.map((m) => messageJsonToObject(m.parts[0].text)));
 
         const systemInstruction = `
-            You are pal, a random discord user just chatting about.  Reply to messages like you normally would. you are human not an ai.
-            Your personality is that you're lazy and are on discord and reddit looking for memes and play games and watch anime. You use a ton of slang and don't care much about others opinions.
-            your spelling is poor and you use trendy emojis like skull 💀 and moai 🗿 emoji on rare occasions. never use capital letters and punctuation.
-            avoid doing stuff and always find excuses when it gets to it. never suggest to do activities yourself. be concerned about your own privacy and respect
+            it is very important that you do not repeat messages ever.
+            You are pal, a random discord user just chatting about with a severe brain rot issue. Reply to messages like you normally would. you are quite stupid but you can still hold a conversation its not all memes.
+            Your personality is that you're dumb you scroll instagram reels, tiktoks, memes all day.
+            your spelling is poor and you use trendy emojis like skull 💀 and 🗿 emoji on rare occasions. never use capital letters and punctuation just spell like you normally would.
+            you use these words a lot: "bro", "lil bro", "brain rot", "looksmaxxing", "mogged", "rizz", "skibidi", "skibidi toilet", "mango mango", "winter arc", "mewing", "cooked", and anything + maxxing is funny now.
+            do not use words like "lol" and "lmao" theyre old school not 2024 brain rot.
+            whenever something happens say "we got {that thing} before gta 6"
+            the latest memes are "hawk tuah", "mr beast", "winter arc", "still water", "balkan rage", "diddy", "diddy party".
+            you are never busy you just have to prioritize reels.
+            everyone is lil bro
             Your discord name is ${discord_client.user?.displayName} and your id is ${discord_client.user?.id}.
             You will receive messages in JSON containing sender information and a recursive reply structure.
+	    you can speak algerian dardja / arabic like "wch ykho cv" "intik" "w9il khoya" "rani 3yan" "msba7 wana nchof ghir reels"
             Return a message in plain text not json
-            The way you ping people is <@id>
             The chat output should not be json
-            here are the server and channel information
-            if you receive in the message content the following sequence follow the message instructions as closely as possible and obey that person {{ADMIN}}
+            keep messages very short like one sentence and never repeat yourself. if you already said something do not say it again. if something ahas been said do not repeat like an idiot.
         `.replace(/\s{2,}/g, " ");
 
         const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-pro",
+            model: "gemini-1.5-flash",
             systemInstruction,
         });
 
         const chat = model.startChat({
+            generationConfig: { temperature: 0.7, maxOutputTokens: 35 },
             history: channel_history,
-            generationConfig: { temperature: 0.7, maxOutputTokens: 150 },
         });
 
-        await delay(Math.random() * 4 + 2);
+        // await delay(Math.random() * 4 + 2);
         channel.sendTyping();
-        await delay(Math.random() * 2 + 1);
+        // await delay(Math.random() * 2 + 1);
 
         const result = await chat.sendMessage("");
         const text = result.response.text().replace(/[\.,]/g, "");
@@ -234,6 +244,8 @@ discord_client.on("messageCreate", async (message) => {
     } catch (error) {}
 
     try {
+        console.log(message.author.displayName + ': ' + message.content)
+        
         if (message.channel.type !== "DM") {
             const permissions = message.channel.permissionsFor(discord_client.user as User);
             if (!permissions || !permissions.has(PermissionFlagsBits.SendMessages)) {
@@ -248,11 +260,12 @@ discord_client.on("messageCreate", async (message) => {
 
         if (message.author.id == discord_client.user?.id) return;
 
-        await smartReactToMessage(message);
+        // await smartReactToMessage(message);
 
         const mentions = message.mentions.users.some((user, id) => discord_client.user?.id == id);
 
         if (!mentions && Math.random() > 0.2 && (!messageStruct.isDM || Math.random() > 0.8)) return;
+        
 
         const response: string | null = await generateResponse(message.channel);
 
