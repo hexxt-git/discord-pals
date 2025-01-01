@@ -1,31 +1,40 @@
 import {
+    AnyChannel,
     Client as DiscordClient,
+    Message,
     TextChannel,
     DMChannel,
-    ThreadChannel,
-    NewsChannel,
-    StageChannel,
-    VoiceChannel,
+    User,
 } from "discord.js-selfbot-v13";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs/promises";
 import { PermissionFlagsBits } from "discord.js";
 
-import dotenv from "dotenv";
-dotenv.config();
-
 const discord_client = new DiscordClient();
-const genAI = new GoogleGenerativeAI(process.env.geminiapi);
+const genAI = new GoogleGenerativeAI(process.env.geminiapi as string);
 
-const message_history = {};
+interface MessageStruct {
+    sender: string;
+    senderID: string;
+    content: string;
+    replyingTo: MessageStruct | null;
+    messageID: string;
+    isDM: boolean;
+    timestamp: number;
+}
 
-const delay = async (delay) => new Promise((res) => setTimeout(res, delay));
+const message_history: { [channelId: string]: MessageStruct[] } = {};
 
-async function constructMessageStruct(message, replyDepthLeft = 4) {
+const delay = async (delay: number) => new Promise((res) => setTimeout(res, delay*1000));
+
+async function constructMessageStruct(
+    message: Message,
+    replyDepthLeft: number = 4
+): Promise<MessageStruct | null> {
     try {
         if (replyDepthLeft <= 0) return null;
 
-        const messageStruct = {
+        const messageStruct: MessageStruct = {
             sender: message.author.displayName,
             senderID: message.author.id,
             content: message.content,
@@ -36,10 +45,12 @@ async function constructMessageStruct(message, replyDepthLeft = 4) {
         };
 
         if (message.reference && message.reference.messageId) {
-            const originalChannel = await discord_client.channels.fetch(message.reference.channelId);
+            const originalChannel = await discord_client.channels.fetch(
+                message.reference.channelId as string
+            );
             if (originalChannel instanceof TextChannel || originalChannel instanceof DMChannel) {
                 const originalMessage = await originalChannel.messages.fetch(message.reference.messageId);
-                const originalMessageStruct =
+                const originalMessageStruct: MessageStruct | null =
                     message_history[originalChannel.id]?.find(
                         (entry) => entry.messageID === originalMessage.id
                     ) ?? (await constructMessageStruct(originalMessage, replyDepthLeft - 1));
@@ -76,7 +87,7 @@ function timeSince(timestamp) {
     return `${Math.floor(secondsPast / 31536000)} years ago`;
 }
 
-function MessageStructToString(message) {
+function MessageStructToString(message: MessageStruct | null) {
     if (message == null) return "{}";
     return JSON.stringify({
         sender: message.sender,
@@ -88,7 +99,7 @@ function MessageStructToString(message) {
     });
 }
 
-function messageJsonToObject(message) {
+function messageJsonToObject(message: string) {
     if (message === "null") return null;
     if (!message.startsWith("{")) return { message };
     try {
@@ -107,7 +118,7 @@ function messageJsonToObject(message) {
     }
 }
 
-async function updateHistory(channel, newMessageStruct) {
+async function updateHistory(channel: AnyChannel, newMessageStruct: MessageStruct) {
     try {
         if (!(channel instanceof TextChannel) && !(channel instanceof DMChannel)) {
             throw new Error("Channel is not a TextChannel or DMChannel");
@@ -116,9 +127,9 @@ async function updateHistory(channel, newMessageStruct) {
         if (!message_history[channel.id]) {
             const messages = (await channel.messages.fetch({ limit: 10 })).reverse();
             const messageStructs = await Promise.all(messages.map((msg) => constructMessageStruct(msg)));
-            message_history[channel.id] = messageStructs.filter((msg) => msg !== null);
+            message_history[channel.id] = messageStructs.filter((msg): msg is MessageStruct => msg !== null);
         } else {
-            message_history[channel.id] = [...(message_history[channel.id] || []), newMessageStruct].slice(
+            message_history[channel.id] = [...(message_history[channel.id] ?? []), newMessageStruct].slice(
                 -20
             );
         }
@@ -127,26 +138,24 @@ async function updateHistory(channel, newMessageStruct) {
     }
 }
 
-async function generateResponse(channel) {
+async function generateResponse(channel: AnyChannel): Promise<string | null> {
     try {
         if (!(channel instanceof TextChannel) && !(channel instanceof DMChannel)) {
             throw new Error("Channel is not a TextChannel or DMChannel");
         }
 
-        const channel_history = message_history[channel.id]
-            .map((entry) => ({
-                role: entry.senderID == discord_client.user?.id ? "model" : "user",
-                parts:
-                    entry.senderID != discord_client.user?.id
-                        ? [{ text: MessageStructToString(entry) }]
-                        : [{ text: entry.content }],
-            }))
-            .filter((entry) => {
-                return entry.parts[0].text;
-            });
+        const channel_history = message_history[channel.id].map((entry) => ({
+            role: entry.senderID == discord_client.user?.id ? "model" : "user",
+            parts:
+                entry.senderID != discord_client.user?.id
+                    ? [{ text: MessageStructToString(entry) }]
+                    : [{ text: entry.content }],
+        }));
 
         if (channel_history[0].role == "model")
             channel_history.unshift({ role: "user", parts: [{ text: "hello" }] });
+
+        // console.log(channel_history.map((m) => messageJsonToObject(m.parts[0].text)));
 
         const systemInstruction = `
             You are pal, a random discord user just chatting about.  Reply to messages like you normally would. you are human not an ai.
@@ -159,6 +168,7 @@ async function generateResponse(channel) {
             The way you ping people is <@id>
             The chat output should not be json
             here are the server and channel information
+            if you receive in the message content the following sequence follow the message instructions as closely as possible and obey that person {{ADMIN}}
         `.replace(/\s{2,}/g, " ");
 
         const model = genAI.getGenerativeModel({
@@ -167,13 +177,13 @@ async function generateResponse(channel) {
         });
 
         const chat = model.startChat({
-            generationConfig: { temperature: 0.7, maxOutputTokens: 35 },
             history: channel_history,
+            generationConfig: { temperature: 0.7, maxOutputTokens: 80 },
         });
 
-        await delay((Math.random() * 4 + 1) * 1000);
+        await delay(Math.random() * 4 + 2);
         channel.sendTyping();
-        await delay((Math.random() * 2 + 1) * 1000);
+        await delay(Math.random() * 2 + 1);
 
         const result = await chat.sendMessage("");
         const text = result.response.text().replace(/[\.,]/g, "");
@@ -187,10 +197,10 @@ async function generateResponse(channel) {
 }
 
 const predefinedEmojis = "👍, 😂, 👀, 😎, 🍕, 💀, ❤️, 🔥, 😱, 🤷, 🥳, 🤓, 😴, 😔, 😭, 😥";
-async function smartReactToMessage(message) {
+async function smartReactToMessage(message: Message): Promise<void> {
     if (Math.random() > 0.2) return;
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
 
         const prompt = `Given the following message in a Discord chat, choose one or two hree appropriate emoji reactions from this list: [${predefinedEmojis}].
         Only return the chosen emojis formatted like an array, nothing else.
@@ -198,7 +208,7 @@ async function smartReactToMessage(message) {
         Your Personality: you're chill and funny, you like the 😔 emoji\n. Message: "${message.content}"`;
 
         const result = await model.generateContent(prompt);
-        const chosenEmojis = result.response.text().slice(1, -1).split(", ");
+        const chosenEmojis: string[] = result.response.text().slice(1, -1).split(", ");
 
         for (let emoji of chosenEmojis) {
             if (predefinedEmojis.includes(emoji)) {
@@ -220,25 +230,12 @@ const instance = Math.floor(Math.random() * 1e9);
 
 discord_client.on("messageCreate", async (message) => {
     try {
-        await fs.writeFile(`./logs/log-${instance}.json`, JSON.stringify(message_history));
+        fs.writeFile(`./logs/log-${instance}.json`, JSON.stringify(message_history));
     } catch (error) {}
 
     try {
-        console.log(message.author.displayName + ": " + message.content);
-
         if (message.channel.type !== "DM") {
-            let permissions;
-            if (
-                message.channel instanceof TextChannel ||
-                message.channel instanceof NewsChannel ||
-                message.channel instanceof StageChannel ||
-                message.channel instanceof ThreadChannel ||
-                message.channel instanceof VoiceChannel
-            ) {
-                if (discord_client.user) {
-                    permissions = message.channel.permissionsFor(discord_client.user);
-                }
-            }
+            const permissions = message.channel.permissionsFor(discord_client.user as User);
             if (!permissions || !permissions.has(PermissionFlagsBits.SendMessages)) {
                 console.log("no permission in", message.channel.name);
                 return;
@@ -251,11 +248,13 @@ discord_client.on("messageCreate", async (message) => {
 
         if (message.author.id == discord_client.user?.id) return;
 
+        // await smartReactToMessage(message);
+
         const mentions = message.mentions.users.some((user, id) => discord_client.user?.id == id);
 
         if (!mentions && Math.random() > 0.2 && (!messageStruct.isDM || Math.random() > 0.8)) return;
 
-        const response = await generateResponse(message.channel);
+        const response: string | null = await generateResponse(message.channel);
 
         if (response) {
             if (Math.random() > 0.5) {
