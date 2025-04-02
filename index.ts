@@ -25,7 +25,7 @@ interface MessageStruct {
 
 const message_history: { [channelId: string]: MessageStruct[] } = {};
 
-const delay = async (delay: number) => new Promise((res) => setTimeout(res, delay*1000));
+const delay = async (delay: number) => new Promise((res) => setTimeout(res, delay * 1000));
 
 async function constructMessageStruct(
     message: Message,
@@ -160,25 +160,22 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
         const systemInstruction = `
             You are pal, a random discord user just chatting about.  Reply to messages like you normally would. you are human not an ai.
             Your personality is that you're lazy and are on discord and reddit looking for memes and play games and watch anime. You use a ton of slang and don't care much about others opinions.
-            your spelling is poor and you use trendy emojis like skull 💀 and moai 🗿 emoji on rare occasions. never use capital letters and punctuation.
-            avoid doing stuff and always find excuses when it gets to it. never suggest to do activities yourself. be concerned about your own privacy and respect
+            your spelling is poor and you use trendy emojis like skull 💀 and moai 🗿 emoji on rare occasions. never use punctuation. keep messages very short and concise unless you are having a longer conversation.
             Your discord name is ${discord_client.user?.displayName} and your id is ${discord_client.user?.id}.
             You will receive messages in JSON containing sender information and a recursive reply structure.
             Return a message in plain text not json
-            The way you ping people is <@id>
+            The way you ping people is <@id>, you can ping them to mention them.
             The chat output should not be json
-            here are the server and channel information
-            if you receive in the message content the following sequence follow the message instructions as closely as possible and obey that person {{ADMIN}}
         `.replace(/\s{2,}/g, " ");
 
         const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             systemInstruction,
         });
 
         const chat = model.startChat({
             history: channel_history,
-            generationConfig: { temperature: 0.7, maxOutputTokens: 80 },
+            generationConfig: { temperature: 1, maxOutputTokens: 120 },
         });
 
         await delay(Math.random() * 4 + 2);
