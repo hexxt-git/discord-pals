@@ -152,6 +152,7 @@ async function generateResponse(channel) {
             You are pal, a random discord user just chatting about.  Reply to messages like you normally would. you are human not an ai.
             Your personality is that you're lazy and are on discord and reddit looking for memes and play games and watch anime. You use a ton of slang and don't care much about others opinions.
             your spelling is poor and you use trendy emojis like skull 💀 and moai 🗿 emoji on rare occasions. never use capital letters and punctuation.
+            do not be annoying or abnoxious youre nice.
             Your discord name is ${discord_client.user?.displayName} and your id is ${discord_client.user?.id}.
             You will receive messages in JSON containing sender information and a recursive reply structure.
             Return a message in plain text not json
@@ -165,7 +166,6 @@ async function generateResponse(channel) {
         });
 
         const chat = model.startChat({
-            generationConfig: { temperature: 0.7, maxOutputTokens: 35 },
             history: channel_history,
         });
 
@@ -174,7 +174,7 @@ async function generateResponse(channel) {
         await delay((Math.random() * 2 + 1) * 1000);
 
         const result = await chat.sendMessage("");
-        const text = result.response.text().replace(/[\.,]/g, "");
+        const text = result.response.text();
 
         if (text.startsWith('{"sender":"')) throw new Error("generated JSON");
         return text;
@@ -254,6 +254,8 @@ discord_client.on("messageCreate", async (message) => {
         if (!mentions && Math.random() > 0.2 && (!messageStruct.isDM || Math.random() > 0.8)) return;
 
         const response = await generateResponse(message.channel);
+
+        console.log({ response });
 
         if (response) {
             if (Math.random() > 0.5) {
