@@ -1,3 +1,5 @@
+// this script is not the one being used.
+
 import {
     AnyChannel,
     Client as DiscordClient,
@@ -170,7 +172,7 @@ async function generateResponse(channel: AnyChannel): Promise<string | null> {
         `.replace(/\s{2,}/g, " ");
 
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash",
+            model: "gemini-2.5-flash",
             systemInstruction,
         });
 
